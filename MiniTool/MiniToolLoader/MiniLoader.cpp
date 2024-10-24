@@ -1,0 +1,707 @@
+
+#include <stdio.h>
+#include "MiniDrvCtrl.h"  
+#include "..\MiniTool\ioctl.h"
+#include "Log.h"
+#include "Firmwaretable.h"
+
+
+MiniDrvCtrl miniDriverCtrl;
+
+#define DRIVER_PATH		"C:\\MiniTool.sys"
+#define SERVICE_NAME	"MiniTool"
+#define NT_SYMBOLICLINK "\\\\.\\MiniTool"
+#define DISPLAY_NAME	SERVICE_NAME
+
+#define DRIVER_REQUEST(a,b,c,d,e,f) miniDriverCtrl.IoControl(NT_SYMBOLICLINK, a,b,c,d,e,f);
+
+using namespace std;
+
+EXTERN_C_START
+
+VOID
+ReadPhysicalMemory(
+	ULONG64 PhysicalAddress,
+	ULONG64 ByteCount,
+	UINT32 Alignment
+)
+{
+	ULONG RetBytes = 0;
+	PUCHAR Buffer;
+	ULONG64 InputParam[2];
+
+	InputParam[0] = PhysicalAddress;
+	InputParam[1] = ByteCount;
+
+	Buffer = (PUCHAR)malloc(ByteCount);
+	if (Buffer == NULL)
+	{
+		DbgPrint("cannot allocate memory \r\n");
+		return;
+	}
+
+	RtlZeroMemory(Buffer, ByteCount);
+
+	DRIVER_REQUEST(IOCTL_RD_PHYSMEM, (void*)InputParam, sizeof(ULONG64) * 2, Buffer, ByteCount, &RetBytes);
+
+	DbgPrint("Memory return from kernel from physical Address= 0x%I64x Length= %I64d \r\n", PhysicalAddress, ByteCount);
+
+	for (int i = 0; i < ByteCount; i += max(1, Alignment))
+	{
+		if (i != 0 && (i % 16 == 0))
+		{
+			DbgPrint("\r\n");
+		}
+
+		switch (Alignment)
+		{
+		case 2:
+			DbgPrint("%.4X ", ((PUSHORT)Buffer)[i / 2]);
+			break;
+		case 4:
+			DbgPrint("%.8X ", ((PULONG)Buffer)[i / 4]);
+			break;
+		case 8:
+			DbgPrint("%.16llX ", ((PULONG64)Buffer)[i / 8]);
+			break;
+		default:
+			DbgPrint("%.2X ", Buffer[i]);
+			break;
+		}
+	}
+
+	if (Buffer)
+	{
+		free(Buffer);
+	}
+}
+
+
+VOID WritePhysicalMemory(
+	ULONG64 PhysicalAddress,
+	ULONG64 Data,
+	ULONG64 ByteCount,
+	UINT32 Alignment)
+{
+	ULONG RetBytes = 0;
+	PUCHAR Buffer;
+	ULONG64 InputParam[3];
+
+	InputParam[0] = PhysicalAddress;
+	InputParam[1] = Data;
+	InputParam[2] = ByteCount;
+
+
+	Buffer = (PUCHAR)malloc(ByteCount);
+
+	if (Buffer == NULL)
+	{
+		DbgPrint("cannot allocate memory \r\n");
+		return;
+	}
+
+	RtlZeroMemory(Buffer, ByteCount);
+
+	DRIVER_REQUEST(IOCTL_WR_PHYSMEM, (void*)InputParam, sizeof(ULONG64) * 3, Buffer, ByteCount, &RetBytes);
+
+	DbgPrint("Memory return from kernel from physical Address= 0x%I64x, Old Data= 0x%I64x, Length= %I64d \r\n", PhysicalAddress, Buffer, ByteCount);
+
+}
+
+VOID
+ReadBarPhysicalMemory(
+	ULONG64 PhysicalAddress,
+	ULONG64 Offset,
+	ULONG64 ByteCount,
+	UINT32 Alignment
+)
+{
+	ULONG RetBytes = 0;
+	PUCHAR Buffer;
+	ULONG64 InputParam[3];
+
+	InputParam[0] = PhysicalAddress;
+	InputParam[1] = Offset;
+	InputParam[2] = ByteCount;
+
+	Buffer = (PUCHAR)malloc(ByteCount);
+	if (Buffer == NULL)
+	{
+		DbgPrint("cannot allocate memory \r\n");
+		return;
+	}
+
+	RtlZeroMemory(Buffer, ByteCount);
+
+	DRIVER_REQUEST(IOCTL_RD_PHYSMEM, (void*)InputParam, sizeof(ULONG64) * 3, Buffer, ByteCount, &RetBytes);
+
+	DbgPrint("Memory return from kernel from bar physical Address= 0x%I64x Length= %I64d \r\n", PhysicalAddress, ByteCount);
+
+	for (int i = 0; i < ByteCount; i += max(1, Alignment))
+	{
+		if (i != 0 && (i % 16 == 0))
+		{
+			DbgPrint("\r\n");
+		}
+
+		switch (Alignment)
+		{
+		case 2:
+			DbgPrint("%.4X ", ((PUSHORT)Buffer)[i / 2]);
+			break;
+		case 4:
+			DbgPrint("%.8X ", ((PULONG)Buffer)[i / 4]);
+			break;
+		case 8:
+			DbgPrint("%.16llX ", ((PULONG64)Buffer)[i / 8]);
+			break;
+		default:
+			DbgPrint("%.2X ", Buffer[i]);
+			break;
+		}
+	}
+
+	if (Buffer)
+	{
+		free(Buffer);
+	}
+}
+
+int
+ReadBarInfo(
+	UCHAR Bus,
+	UCHAR Dev,
+	UCHAR Func
+)
+{
+	PCI_BAR_INFO BarInfo[6];
+	ULONG RetBytes = 0;
+	ULONG Buffer = 0;
+
+	Buffer |= (Bus << 24);
+	Buffer |= (Dev << 16);
+	Buffer |= (Func << 8);
+	Buffer |= 0;
+
+	RtlZeroMemory(&BarInfo, sizeof(BarInfo));
+
+	DRIVER_REQUEST(IOCTL_RD_BAR_INFO, (void*)&Buffer, 0x4, BarInfo, sizeof(BarInfo), &RetBytes);
+
+	DbgPrint("-----------------------------\r\n");
+	DbgPrint("| Bar Address   | Bar Size   |\r\n");
+	DbgPrint("-----------------------------\r\n");
+
+	for (int i = 0; i < 6; i++)
+	{
+		DbgPrint("|%-15x|%-11x|\r\n", BarInfo[i].BarAddress, BarInfo[i].BarSize);
+	}
+
+	DbgPrint("-----------------------------\r\n");
+
+	return 0;
+}
+
+int ReadPciCfg(
+	UCHAR Bus,
+	UCHAR Dev,
+	UCHAR Func,
+	UINT64 ByteCount,
+	UCHAR Alignment
+)
+{
+	ULONG RetBytes = 0;
+	ULONG Buffer = 0;
+	PUCHAR Value;
+
+	Buffer |= (Bus << 24);
+	Buffer |= (Dev << 16);
+	Buffer |= (Func << 8);
+	Buffer |= 0;
+
+	Value = (PUCHAR)malloc(ByteCount);
+	if (Value == NULL)
+	{
+		DbgPrint("cannot allocate memory \r\n");
+		return 0;
+	}
+
+	RtlZeroMemory(Value, ByteCount);
+
+
+	DRIVER_REQUEST(IOCTL_RD_PCICFG, (void*)&Buffer, 0x4, Value, ByteCount, &RetBytes);
+
+	DbgPrint("\r\n");
+	for (int i = 0; i < ByteCount; i += max(1, Alignment))
+	{
+		if (i != 0 && (i % 16 == 0))
+		{
+			DbgPrint("\r\n");
+		}
+
+		switch (Alignment)
+		{
+		case 2:
+			DbgPrint("%.4X ", ((PUSHORT)Value)[i / 2]);
+			break;
+		case 4:
+			DbgPrint("%.8X ", ((PULONG)Value)[i / 4]);
+			break;
+		case 8:
+			DbgPrint("%.16llX ", ((PULONG64)Value)[i / 8]);
+			break;
+		default:
+			DbgPrint("%.2X ", Value[i]);
+			break;
+		}
+	}
+
+	return RetBytes;
+}
+
+
+VOID GetMCFGTable(ULONG64* baseAddress)
+{
+	DWORD bytesWritten = 0;
+	DWORD mcfgBuffSize = GetSystemFirmwareTable('ACPI', 'GFCM', NULL, 0);
+	char* buff = (char*)malloc(mcfgBuffSize * sizeof(char));
+	if (!buff)
+	{
+		printf("Error for malloc");
+		return;
+	}
+
+	bytesWritten = GetSystemFirmwareTable('ACPI', 'GFCM', buff, mcfgBuffSize);
+
+	if (bytesWritten != mcfgBuffSize) 
+	{
+
+		printf("Error for malloc");
+		return;
+	}
+
+	ACPI_DATA* tableBuff = (ACPI_DATA*)buff;
+
+	ULONG64 cfgBaseAddress = tableBuff->Configs.BASEADDRESS;
+
+	if (buff)
+	{
+		free(buff);
+	}
+
+	*baseAddress = cfgBaseAddress;
+}
+
+VOID ReadMMCFG(
+	UCHAR Bus,
+	UCHAR Dev,
+	UCHAR Func,
+	UINT64 Offset,
+	UINT64 ByteCount,
+	UCHAR Alignment
+)
+{
+	ULONG RetBytes = 0;
+	ULONG Buffer = 0;
+	PUCHAR Value;
+	ULONG64 InputParam[4];
+	ULONG64 mcfgTableBase = 0;
+
+	GetMCFGTable(&mcfgTableBase);
+
+	if (mcfgTableBase == 0)
+	{
+		DbgPrint("cannot GetMCFGTable address \r\n");
+		return;
+	}
+
+	Buffer |= (Bus << 24);
+	Buffer |= (Dev << 16);
+	Buffer |= (Func << 8);
+	Buffer |= 0;
+
+	InputParam[0] = Buffer;
+	InputParam[1] = mcfgTableBase;
+	InputParam[2] = Offset;
+	InputParam[3] = ByteCount;
+
+	Value = (PUCHAR)malloc(ByteCount);
+	if (Value == NULL)
+	{
+		DbgPrint("cannot allocate memory \r\n");
+		return;
+	}
+
+	RtlZeroMemory(Value, ByteCount);
+
+	DRIVER_REQUEST(IOCTL_RD_MMCFG, (void*)InputParam, sizeof(ULONG64) * 4, Value, ByteCount, &RetBytes);
+
+	DbgPrint("\r\n");
+	for (int i = 0; i < ByteCount; i += max(1, Alignment))
+	{
+		if (i != 0 && (i % 16 == 0))
+		{
+			DbgPrint("\r\n");
+		}
+
+		switch (Alignment)
+		{
+		case 2:
+			DbgPrint("%.4X ", ((PUSHORT)Value)[i / 2]);
+			break;
+		case 4:
+			DbgPrint("%.8X ", ((PULONG)Value)[i / 4]);
+			break;
+		case 8:
+			DbgPrint("%.16llX ", ((PULONG64)Value)[i / 8]);
+			break;
+		default:
+			DbgPrint("%.2X ", Value[i]);
+			break;
+		}
+	}
+
+	if (Value)
+	{
+		free(Value);
+	}
+
+}
+
+
+VOID EnumPCIIOAll()
+{
+	PCI_INFO PCIInfo[65536];
+
+	ULONG RetBytes = 0;
+	ULONG Buffer = 0;
+
+	RtlZeroMemory(&PCIInfo, sizeof(PCI_INFO));
+
+	DRIVER_REQUEST(IOCTL_ENUM_PCI, (void*)&Buffer, 0x4, PCIInfo, sizeof(PCIInfo), &RetBytes);
+
+	DbgPrint("--------------------------------------\r\n");
+	DbgPrint("| PCI ID   | Vendor ID   | Device ID | \r\n");
+	DbgPrint("--------------------------------------\r\n");
+
+	for (int i = 0; i < 100; i++)
+	{
+		UINT32 PCIID = PCIInfo[i].PCIID;
+		UINT32 Bus = (PCIID >> 24) & 0xFF;
+		UINT32 Dev = (PCIID >> 16) & 0xFF;
+		UINT32 Fun = (PCIID >> 8) & 0xFF;
+		DbgPrint("|B:%x D:%x F:%x|%-11x|%-11x|\r\n", Bus, Dev, Fun, PCIInfo[i].u.VendorID, PCIInfo[i].u.DeviceID);
+	}
+}
+
+VOID EnumPCIEAll()
+{
+	PCI_INFO PCIInfo[65536];
+	ULONG RetBytes = 0;
+	ULONG Buffer = 0;
+
+	RtlZeroMemory(&PCIInfo, sizeof(PCI_INFO));
+
+	DRIVER_REQUEST(IOCTL_ENUM_PCIE, (void*)&Buffer, 0x4, PCIInfo, sizeof(PCIInfo), &RetBytes);
+
+	DbgPrint("--------------------------------------\r\n");
+	DbgPrint("| PCI ID   | Vendor ID   | Device ID | \r\n");
+	DbgPrint("--------------------------------------\r\n");
+
+	for (int i = 0; i < 100; i++)
+	{
+		UINT32 PCIID = PCIInfo[i].PCIID;
+		UINT32 Bus = (PCIID >> 24) & 0xFF;
+		UINT32 Dev = (PCIID >> 16) & 0xFF;
+		UINT32 Fun = (PCIID >> 8) & 0xFF;
+		DbgPrint("|B:%x D:%x F:%x|%-11x|%-11x|\r\n", Bus, Dev, Fun, PCIInfo[i].u.VendorID, PCIInfo[i].u.DeviceID);
+	}
+}
+
+
+ULONG64 ReadMsr(ULONG64 index)
+{
+	ULONG RetBytes = 0;
+	ULONG64 Index = index;
+	ULONG64 Buffer = 0;
+	DRIVER_REQUEST(IOCTL_RDMSR, (void*)&Index, sizeof(ULONG64), (void*)&Buffer, sizeof(ULONG64), &RetBytes);
+
+	return Buffer;
+}
+EXTERN_C_END
+
+void Unload(char* ServiceName)
+{
+	DbgPrint("[+] Uninstalling Driver Service ... \r\n");
+	if (!miniDriverCtrl.Stop(ServiceName)) {
+		LOG_LAST_ERROR(L"[-] UnLoading Driver Failed \r\n");
+		return;
+	}
+	if (!miniDriverCtrl.Remove(ServiceName)) {
+		LOG_LAST_ERROR(L"[-] Removing Driver Failed \r\n");
+		return;
+	}
+	DbgPrint("[+] Uninstall Driver Service Successfully ServiceName= %s \r\n", ServiceName);
+}
+
+void Load(char* DrvPath, char* ServiceName)
+{
+	DbgPrint("[+] Installing Driver Service ...  \r\n");
+	miniDriverCtrl.Install(DrvPath, ServiceName, DISPLAY_NAME);
+	if (!miniDriverCtrl.Start(ServiceName))
+	{
+		LOG_LAST_ERROR(L"[-] Install Driver Failure \r\n");
+		miniDriverCtrl.Remove(ServiceName);
+		return;
+	}
+	DbgPrint("[+] Install Driver Successfully DrvPath= %s ServiceName= %s \r\n", DrvPath, ServiceName);
+}
+
+void Unload()
+{
+	Unload(SERVICE_NAME);
+}
+
+void Load()
+{
+	CHAR Dir[512] = { 0 };
+	CHAR DriverName[] = "\\MiniTool.sys";
+	int Index = GetCurrentDirectoryA(512, Dir);
+	strcpy_s(&Dir[Index], sizeof(DriverName), DriverName);
+	DbgPrint("DriverPath= %s \r\n SerivceName= MiniTool\r\n", Dir);
+	Load(Dir, SERVICE_NAME);
+}
+
+void PrintMenu()
+{
+	DbgPrint("---------------------------------------------------------------------------------------------------------------- \r\n");
+	DbgPrint("| Mini Tools                                                                                                   | \r\n");
+	DbgPrint("|                                                                                                              | \r\n");
+	DbgPrint("|--------------------------------------------------------------------------------------------------------------| \r\n");
+	DbgPrint("| Option | Parameters                           | Description                                                  | \r\n");
+	DbgPrint("---------------------------------------------------------------------------------------------------------------| \r\n");
+	DbgPrint("|  -h                                                              Show This Menu                              | \r\n");
+	DbgPrint("|  -l                                                              Load MiniTool                               | \r\n");
+	DbgPrint("|  -l      <DriverPath> <SerciceName>                              Load Kernel Driver                          | \r\n");
+	DbgPrint("|  -u      <ServiceName>                                           Unload Driver                               | \r\n");
+	DbgPrint("|  -r     -readpa <physical address> <bytes count>                 Read the number of bytes for a given PA     | \r\n");
+	DbgPrint("|  -r     -rdmsr  <index>                                          Read MSR OS                                 | \r\n");
+	DbgPrint("|  -r     -pcicfg <Bus> <Device> <Function>                        Read the PCI config                         | \r\n");
+	DbgPrint("|  -r     -readbarpa <physical address> <offset> <bytes count>     Read Bar Address                            | \r\n");
+	DbgPrint("|  -r     -mmcfg <Bus> <Device> <Function> <offset> <bytes count>  Read mmcfg                                  | \r\n");
+	DbgPrint("|  -r     -enumpciio                                               Enum PCI Device(CFC)                        | \r\n");
+	DbgPrint("|  -r     -enumpcie                                                Enum PCI Device                             | \r\n");
+	DbgPrint("|  -q                                                              Quit  Application                           | \r\n");
+	DbgPrint("---------------------------------------------------------------------------------------------------------------- \r\n");
+
+}
+
+int ParseParam(char* param, char** ret)
+{
+	int i = 0;
+	char* next = nullptr;
+	char* ptr = strtok_s(param, " ", &next);
+	while (ptr != NULL)
+	{
+		///DbgPrint("'%s'\n", ptr);
+		strcpy_s(ret[i], 256, ptr);
+		ptr = strtok_s(NULL, " ", &next);
+		i++;
+	}
+	return i;
+}
+
+char** GetParameter(char* param, int* _count)
+{
+	char** x = (char**)(malloc(sizeof(ULONG_PTR) * 128));
+	if (!x) {
+		return x;
+	}
+
+	for (int i = 0; i < 128; i++) {
+		x[i] = (char*)malloc(256);
+	}
+
+	int count = ParseParam(param, x);
+
+#ifdef DBGSTRING
+	for (int i = 0; i < count; i++) {
+		DbgPrint("str= %s \r\n", x[i]);
+	}
+#endif
+
+	* _count = count;
+	return x;
+}
+
+void FreeParameter(char** x) {
+	for (int i = 0; i < 60; i++) 
+	{
+		free(x[i]);
+		x[i] = nullptr;
+	}
+	free(x);
+}
+
+int main()
+{
+	int count = 0;
+	UCHAR Buffer[4096] = { 0 };
+	PrintMenu();
+	Load();
+	while (1)
+	{
+		DbgPrint("\nInput Command [-q to quit] : \r\n");
+		char param[4096] = { 0 };
+		fgets(param, 4096, stdin);
+		size_t len = strlen(param);
+		if (len > 0 && param[len - 1] == '\n') 
+		{
+			param[--len] = '\0';
+		}
+		if (!strncmp(param, "-l", 2)) 
+		{
+			char** x = GetParameter(param, &count);
+			if (count < 0) 
+			{
+				continue;
+			}
+
+			if (count == 1) 
+			{
+				Load();
+				continue;
+			}
+
+			if (!strlen(x[1])) 
+			{
+				DbgPrint("Please Input Driver Path to be loaded \r\n");
+				continue;
+			}
+			if (!strlen(x[2])) 
+			{
+				DbgPrint("Please Input Service Name to be started \r\n");
+				continue;
+			}
+
+			Load(x[1], x[2]);
+			FreeParameter(x);
+			x = nullptr;
+		}
+		else if (!strncmp(param, "-u", 2)) 
+		{
+			char** x = GetParameter(param, &count);
+			if (count <= 0) {
+				DbgPrint("Please Input Service Name to be started \r\n");
+				continue;
+			}
+			if (count == 1) {
+				Unload();
+				continue;
+			}
+
+			Unload(x[1]);
+			FreeParameter(x);
+			x = nullptr;
+		}
+		else if (!strncmp(param, "-q", 2)) 
+		{
+			Unload();
+			TerminateProcess(GetCurrentProcess(), 0);
+		}
+		else if (!strncmp(param, "-h", 2)) 
+		{
+			PrintMenu();
+		}
+		else if (!strncmp(param, "-r", 2)) 
+		{
+			char** x = GetParameter(param, &count);
+			if (count <= 0) 
+			{
+				DbgPrint("Please Input Service Name to be started \r\n");
+				continue;
+			}
+
+			if (!strcmp(x[1], "-rdmsr")) 
+			{
+				ULONGLONG index = strtoull(x[2], NULL, 0);
+				ReadMsr(index);
+			}
+
+			if (!strcmp(x[1], "-pcicfg")) 
+			{
+				UCHAR Bus = strtoull(x[2], NULL, 0) & 0xFF;
+				UCHAR Dev = strtoull(x[3], NULL, 0) & 0xFF;
+				UCHAR Func = strtoull(x[4], NULL, 0) & 0xFF;
+				ULONG64 BytePrinted = strtoull(x[5], NULL, 0);
+				ULONG64 Alignment = strtoull(x[6], NULL, 0);
+				ReadBarInfo(Bus, Dev, Func);
+				ReadPciCfg(Bus, Dev, Func, BytePrinted, Alignment);
+			}
+
+			if (!strcmp(x[1], "-readpa")) 
+			{
+
+				ULONG64 Address = strtoull(x[2], NULL, 0);
+				ULONG64 ByteCount = strtoull(x[3], NULL, 0);
+				ULONG64 Alignment = strtoull(x[4], NULL, 0);
+				ReadPhysicalMemory(Address, ByteCount, Alignment);
+			}
+
+			if (!strcmp(x[1], "-mmcfg"))
+			{
+				UCHAR Bus = strtoull(x[2], NULL, 0) & 0xFF;
+				UCHAR Dev = strtoull(x[3], NULL, 0) & 0xFF;
+				UCHAR Func = strtoull(x[4], NULL, 0) & 0xFF;
+				ULONG64 Offset = strtoull(x[5], NULL, 0);
+				ULONG64 BytePrinted = strtoull(x[6], NULL, 0);
+				ULONG64 Alignment = strtoull(x[7], NULL, 0);
+
+				ReadMMCFG(Bus, Dev, Func, Offset, BytePrinted, Alignment);
+			}
+
+			if (!strcmp(x[1], "-readbarpa")) 
+			{
+
+				ULONG64 Address = strtoull(x[2], NULL, 0);
+				ULONG64 Offset = strtoull(x[3], NULL, 0);
+				ULONG64 ByteCount = strtoull(x[4], NULL, 0);
+				ULONG64 Alignment = strtoull(x[5], NULL, 0);
+				ReadBarPhysicalMemory(Address, Offset, ByteCount, Alignment);
+			}
+
+			if (!strcmp(x[1], "-enumpciio"))
+			{
+				EnumPCIIOAll();
+			}
+
+			if (!strcmp(x[1], "-enumpcie"))
+			{
+				EnumPCIEAll();
+			}
+
+
+			FreeParameter(x);
+		}
+		else if (!strncmp(param, "-w", 2)) 
+		{
+			char** x = GetParameter(param, &count);
+			if (count <= 0)
+			{
+				DbgPrint("Please Input Service Name to be started \r\n");
+				continue;
+			}
+
+			if (!strcmp(x[1], "-writepa"))
+			{
+				ULONG64 Address = strtoull(x[2], NULL, 0);
+				ULONG64 Data = strtoull(x[3], NULL, 0);
+				ULONG64 ByteCount = strtoull(x[4], NULL, 0);
+				ULONG64 Alignment = strtoull(x[5], NULL, 0);
+				WritePhysicalMemory(Address, Data, ByteCount, Alignment);
+			}
+		}
+
+
+	}
+	return 0;
+}
