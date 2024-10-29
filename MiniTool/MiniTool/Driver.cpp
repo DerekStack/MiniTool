@@ -228,7 +228,15 @@ NTSTATUS MiniDeviceCtrlRoutine(
 			slot.u.bits.DeviceNumber = (Buf >> 16) & 0xFF;
 			slot.u.bits.FunctionNumber = (Buf >> 8) & 0xFF;
 
+			ULONG busIndex = (Buf >> 24) & 0xFF;
 
+			HalGetBusDataByOffset(
+				PCIConfiguration,
+				busIndex,
+				slot.u.AsULONG,
+				outputBuffer,
+				0,
+				256);
 
 			Irp->IoStatus.Information = outputBufferLength;
 		}
@@ -271,184 +279,6 @@ NTSTATUS MiniDeviceCtrlRoutine(
 			Irp->IoStatus.Information = sizeof(ULONG64);
 		}
 		break;
-		case IOCTL_RD_MMCFG:
-		{
-			ULONG64 dataBuf = ((ULONG64*)inputBuffer)[0];
-			ULONG Buf = dataBuf;
-			ULONG64 mcfgBaseAddress = ((ULONG64*)inputBuffer)[1];
-			ULONG64 Offset = ((ULONG64*)inputBuffer)[2];
-			ULONG64 Size = ((ULONG64*)inputBuffer)[3];
-			ULONG BufferLength = 60;
-			ULONG ReturnLength = 0;
-
-
-			if (!inputBuffer || !outputBuffer)
-			{
-				DbgPrintEx(0, 0, "[ERROR] Get Input Buffer\r\n");
-				break;
-			}
-
-			ULONG BusNumber = (Buf >> 24) & 0xFF;
-			ULONG DeviceNumber = (Buf >> 16) & 0xFF;
-			ULONG FunctionNumber = (Buf >> 8) & 0xFF;
-
-			PHYSICAL_ADDRESS PhysAddr;
-			ULONG64 BaseAddress = mcfgBaseAddress;
-			ULONG64 pciConfigAddress = BaseAddress + (BusNumber << 20 | DeviceNumber << 15 | FunctionNumber << 12);
-
-			ULONG64 readPhyAddr = pciConfigAddress;
-			ULONG64 SourceAddr = PAGE_ALIGN(readPhyAddr);
-			ULONG64 offsetDur = readPhyAddr - SourceAddr;
-			ULONG64 readSize = ROUND_UP_TO_PAGE_SIZE((readPhyAddr + Size - 1) - SourceAddr);
-			PhysAddr.QuadPart = SourceAddr;
-			DbgPrintEx(0, 0, "pciConfigAddress Address= %I64x BaseAddress= %I64x\r\n", pciConfigAddress, BaseAddress);
-
-			UCHAR* ConfigMappedAddress = (UCHAR*)MmMapIoSpace(PhysAddr, readSize, MmNonCached);
-
-			if (!ConfigMappedAddress || !outputBuffer)
-			{
-				DbgPrintEx(0, 0, "[ERROR] MmMapIoSpace fail\r\n");
-				break;
-			}
-
-			MemoryCopyValue(outputBuffer, ConfigMappedAddress + offsetDur, Size);//+ PAGE_ALIGN(readPhyAddr)
-			MmUnmapIoSpace(ConfigMappedAddress, readSize);
-			ConfigMappedAddress = NULL;
-			Irp->IoStatus.Information = Size;
-
-		}
-		break;
-		case IOCTL_WR_MMCFG:
-		{
-			ULONG64 dataBuf = ((ULONG64*)inputBuffer)[0];
-			ULONG Buf = dataBuf;
-			ULONG64 mcfgBaseAddress = ((ULONG64*)inputBuffer)[1];
-			ULONG64 Data = ((ULONG64*)inputBuffer)[2];
-			ULONG64 Size = ((ULONG64*)inputBuffer)[3];
-			ULONG BufferLength = 60;
-			ULONG ReturnLength = 0;
-
-
-			if (!inputBuffer || !outputBuffer)
-			{
-				DbgPrintEx(0, 0, "[ERROR] Get Input Buffer\r\n");
-				break;
-			}
-
-			if (Size > 8)
-			{
-				DbgPrintEx(0, 0, "[ERROR] large Size\r\n");
-				break;
-			}
-
-			ULONG BusNumber = (Buf >> 24) & 0xFF;
-			ULONG DeviceNumber = (Buf >> 16) & 0xFF;
-			ULONG FunctionNumber = (Buf >> 8) & 0xFF;
-
-			PHYSICAL_ADDRESS PhysAddr;
-			ULONG64 BaseAddress = mcfgBaseAddress;
-			ULONG64 pciConfigAddress = BaseAddress + (BusNumber << 20 | DeviceNumber << 15 | FunctionNumber << 12);
-
-			ULONG64 readPhyAddr = pciConfigAddress;
-			ULONG64 SourceAddr = PAGE_ALIGN(readPhyAddr);
-			ULONG64 offsetDur = readPhyAddr - SourceAddr;
-			ULONG64 readSize = ROUND_UP_TO_PAGE_SIZE((readPhyAddr + Size - 1) - SourceAddr);
-			PhysAddr.QuadPart = SourceAddr;
-
-
-			DbgPrintEx(0, 0, "pciConfigAddress Address= %I64x BaseAddress= %I64x\r\n", pciConfigAddress, BaseAddress);
-
-			UCHAR* ConfigMappedAddress = (UCHAR*)MmMapIoSpace(PhysAddr, readSize, MmNonCached);
-
-			if (!ConfigMappedAddress || !outputBuffer)
-			{
-				DbgPrintEx(0, 0, "[ERROR] MmMapIoSpace fail\r\n");
-				break;
-			}
-
-			MemoryCopyValue(outputBuffer, ConfigMappedAddress + offsetDur, Size);//+ PAGE_ALIGN(readPhyAddr)
-			MemoryCopyValue(ConfigMappedAddress + offsetDur, &Data, Size);
-			MmUnmapIoSpace(ConfigMappedAddress, readSize);
-			ConfigMappedAddress = NULL;
-			Irp->IoStatus.Information = Size;
-
-		}
-		break;
-		case IOCTL_RD_MBAR:
-		{
-			if (!inputBuffer || !outputBuffer) {
-				break;
-			}
-
-			PHYSICAL_ADDRESS PhysAddr;
-			ULONG64 Size;
-			ULONG64 Offset;
-
-			Size = ((ULONG64*)inputBuffer)[2];
-			Offset = ((ULONG64*)inputBuffer)[1];
-			ULONG64 readPhyAddr = ((ULONG64*)inputBuffer)[0];
-			readPhyAddr = readPhyAddr + Offset;
-
-			ULONG64 SourceAddr = PAGE_ALIGN(readPhyAddr);
-			ULONG64 offsetDur = readPhyAddr - SourceAddr;
-			ULONG64 readSize = ROUND_UP_TO_PAGE_SIZE((readPhyAddr + Size - 1) - SourceAddr);
-
-			PhysAddr.QuadPart = SourceAddr;
-
-			DbgPrintEx(0, 0, "Reading Bar Address with offset= %I64x, Size= %I64x \r\n", readPhyAddr, Size);
-
-			UCHAR* MappedAddress = (UCHAR*)MmMapIoSpace(PhysAddr, readSize, MmNonCached);
-			if (!MappedAddress || !outputBuffer) {
-				break;
-			}
-
-			MemoryCopyValue(outputBuffer, MappedAddress + offsetDur, Size);
-			MmUnmapIoSpace(MappedAddress, readSize);
-			MappedAddress = NULL;
-			Irp->IoStatus.Information = Size;
-		}
-		break;
-		case IOCTL_WR_MBAR:
-		{
-			if (!inputBuffer || !outputBuffer) {
-				break;
-			}
-
-
-			PHYSICAL_ADDRESS PhysAddr;
-			ULONG64 Size;
-			ULONG64 Data;
-
-			Size = ((ULONG64*)inputBuffer)[2];
-			Data = ((ULONG64*)inputBuffer)[1];
-			ULONG64 readPhyAddr = ((ULONG64*)inputBuffer)[0];
-
-			if (Size > 0)
-			{
-				break;
-			}
-
-			ULONG64 SourceAddr = PAGE_ALIGN(readPhyAddr);
-			ULONG64 offsetDur = readPhyAddr - SourceAddr;
-			ULONG64 readSize = ROUND_UP_TO_PAGE_SIZE((readPhyAddr + Size - 1) - SourceAddr);
-
-			PhysAddr.QuadPart = SourceAddr;
-
-			DbgPrintEx(0, 0, "Write Bar Address with offset= %I64x, Size= %I64x \r\n", readPhyAddr, Size);
-
-			UCHAR* MappedAddress = (UCHAR*)MmMapIoSpace(PhysAddr, readSize, MmNonCached);
-			if (!MappedAddress || !outputBuffer) {
-				break;
-			}
-
-			MemoryCopyValue(outputBuffer, MappedAddress + offsetDur, Size);
-			MemoryCopyValue(MappedAddress + offsetDur, &Data, Size);
-			MmUnmapIoSpace(MappedAddress, readSize);
-
-			MappedAddress = NULL;
-			Irp->IoStatus.Information = Size;
-		}
-		break;
 		case IOCTL_ENUM_PCIE:
 		{
 			PCI_SLOT_NUMBER slot;
@@ -466,72 +296,56 @@ NTSTATUS MiniDeviceCtrlRoutine(
 
 			PciInfo = (PPCI_INFO)outputBuffer;
 
-
-			slot.u.AsULONG = 0;
-			//slot.u.bits.DeviceNumber = (Buf >> 16) & 0xFF;
-			//slot.u.bits.FunctionNumber = (Buf >> 8) & 0xFF;
-
-			//ULONG startBus = (Buf >> 24) & 0xFF;
-
 			UINT16 PCIVenderID = 0;
 			UINT16 PCIDevID = 0;
 			ULONG offset = 0;
 			ULONG devOffset = 0x2;
 
-			ULONG arrIndex = 0;
+			ULONG indexBus = (Buf >> 24) & 0xFF;
+			ULONG indexDevice = (Buf >> 16) & 0xFF;
+			ULONG indexFunciton = (Buf >> 8) & 0xFF;
 
-			for (ULONG indexBus = 0; indexBus < 256; indexBus++)
+			slot.u.AsULONG = 0;
+			slot.u.bits.DeviceNumber = indexDevice;
+			slot.u.bits.FunctionNumber = indexFunciton;
+
+			HalGetBusDataByOffset(
+					PCIConfiguration,
+					indexBus,
+					slot.u.AsULONG,
+					&PCIVenderID,
+					offset,
+					2);
+
+			if (PCIVenderID != 0xFFFF)
 			{
-				for (ULONG indexDevice = 0; indexDevice < 32; indexDevice++)
-				{
-					for (ULONG indexFunciton = 0; indexFunciton < 8; indexFunciton++)
-					{
-						slot.u.AsULONG = 0;
-						slot.u.bits.DeviceNumber = indexDevice;
-						slot.u.bits.FunctionNumber = indexFunciton;
+					HalGetBusDataByOffset(
+						PCIConfiguration,
+						indexBus,
+						slot.u.AsULONG,
+						&PCIDevID,
+						devOffset,
+						2);
 
-						HalGetBusDataByOffset(
-							PCIConfiguration,
-							indexBus,
-							slot.u.AsULONG,
-							&PCIVenderID,
-							offset,
-							2);
-
-						if (PCIVenderID != 0xFFFF)
-						{
-							HalGetBusDataByOffset(
-								PCIConfiguration,
-								indexBus,
-								slot.u.AsULONG,
-								&PCIDevID,
-								devOffset,
-								2);
-
-							DbgPrintEx(0, 0, "Bus= %x, Dev= %x, Func= %x, PCIVenderID= %x, PCIDevID= %x \r\n",
-								indexBus,
-								indexDevice,
-								indexFunciton,
-								PCIVenderID,
-								PCIDevID);
+					DbgPrintEx(0, 0, "Bus= %x, Dev= %x, Func= %x, PCIVenderID= %x, PCIDevID= %x \r\n",
+						indexBus,
+						indexDevice,
+						indexFunciton,
+						PCIVenderID,
+						PCIDevID);
 
 							//ULONG index = indexBus * 256 + indexDevice * 8 + indexFunciton;
 
-							PciInfo[arrIndex].PCIID = (indexBus << 24) | (indexDevice << 16) | (indexFunciton << 8);
-							PciInfo[arrIndex].u.VendorID = PCIVenderID;
-							PciInfo[arrIndex].u.DeviceID = PCIDevID;
-							++arrIndex;
-						}
-					}
-				}
+					PciInfo->PCIID = (indexBus << 24) | (indexDevice << 16) | (indexFunciton << 8);
+					PciInfo->u.VendorID = PCIVenderID;
+					PciInfo->u.DeviceID = PCIDevID;
 			}
 
-			Irp->IoStatus.Information = sizeof(PCI_INFO) * 65536;
+			Irp->IoStatus.Information = sizeof(PCI_INFO);
 		}
 		break;
 		case IOCTL_ENUM_PCI:
 		{
-			PCI_SLOT_NUMBER slot;
 			ULONG Buf = *(ULONG*)inputBuffer;
 			PPCI_INFO PciInfo;
 			if (!inputBuffer || !outputBuffer) {
@@ -546,45 +360,27 @@ NTSTATUS MiniDeviceCtrlRoutine(
 
 			PciInfo = (PPCI_INFO)outputBuffer;
 
-
-			slot.u.AsULONG = 0;
-
-
 			UINT16 PCIVenderID = 0;
 			UINT16 PCIDevID = 0;
 			ULONG offset = 0;
 			ULONG devOffset = 0x2;
 
-			ULONG arrIndex = 0;
+			ULONG indexBus = (Buf >> 24) & 0xFF;
+			ULONG indexDevice = (Buf >> 16) & 0xFF;
+			ULONG indexFunciton = (Buf >> 8) & 0xFF;
 
-			for (ULONG indexBus = 0; indexBus < 256; indexBus++)
+			PCIVenderID = ReadPCICfg(indexBus, indexDevice, indexFunciton, offset, 2);
+
+			if (PCIVenderID != 0xffff)
 			{
-				for (ULONG indexDevice = 0; indexDevice < 32; indexDevice++)
-				{
-					for (ULONG indexFunciton = 0; indexFunciton < 8; indexFunciton++)
-					{
-						slot.u.AsULONG = 0;
-						slot.u.bits.DeviceNumber = indexDevice & 0xFF;
-						slot.u.bits.FunctionNumber = indexFunciton & 0xFF;
-
-						PCIVenderID = ReadPCICfg(indexBus, indexDevice, indexFunciton, offset, 2);
-
-						if (PCIVenderID != 0xffff)
-						{
-
-							PCIDevID = ReadPCICfg(indexBus, indexDevice, indexFunciton, devOffset, 2);
-							//ULONG index = indexBus * 256 + indexDevice * 8 + indexFunciton;
-
-							PciInfo[arrIndex].PCIID = (indexBus << 24) | (indexDevice << 16) | (indexFunciton << 8);
-							PciInfo[arrIndex].u.VendorID = PCIVenderID;
-							PciInfo[arrIndex].u.DeviceID = PCIDevID;
-							++arrIndex;
-						}
-					}
-				}
+				PCIDevID = ReadPCICfg(indexBus, indexDevice, indexFunciton, devOffset, 2);
+				PciInfo->PCIID = (indexBus << 24) | (indexDevice << 16) | (indexFunciton << 8);
+				PciInfo->u.VendorID = PCIVenderID;
+				PciInfo->u.DeviceID = PCIDevID;	
+				
 			}
 
-			Irp->IoStatus.Information = sizeof(PCI_INFO) * 65536;
+			Irp->IoStatus.Information = sizeof(PCI_INFO);
 		}
 		break;
 		}

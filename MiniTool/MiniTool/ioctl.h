@@ -17,14 +17,13 @@
 #define IOCTL_RD_PCICFG			  CTL_CODE_HIDE(100)
 #define IOCTL_RD_PHYSMEM		  CTL_CODE_HIDE(101)   
 #define IOCTL_RDMSR				  CTL_CODE_HIDE(102)
-#define IOCTL_RD_MMCFG			  CTL_CODE_HIDE(103)
-#define IOCTL_RD_MBAR			  CTL_CODE_HIDE(104)
-#define IOCTL_RD_BAR_INFO		  CTL_CODE_HIDE(105) 
+//#define IOCTL_RD_MMCFG			  CTL_CODE_HIDE(103)
+#define IOCTL_RD_BAR_INFO		  CTL_CODE_HIDE(103)
 
 #define IOCTL_WR_PHYSMEM		  CTL_CODE_HIDE(110)
 #define IOCTL_WR_MSR			  CTL_CODE_HIDE(111)
-#define IOCTL_WR_MBAR			  CTL_CODE_HIDE(112)
-#define IOCTL_WR_MMCFG			  CTL_CODE_HIDE(113)
+//#define IOCTL_WR_MBAR			  CTL_CODE_HIDE(112)
+//#define IOCTL_WR_MMCFG			  CTL_CODE_HIDE(113)
 
 #define IOCTL_ENUM_PCI			  CTL_CODE_HIDE(120)
 #define IOCTL_ENUM_PCIE			  CTL_CODE_HIDE(121)
@@ -35,6 +34,14 @@ typedef struct _PCI_BAR_INFO
 	UINT32 BarSize;
 
 }PCI_BAR_INFO, * PPCI_BAR_INFO;
+
+//
+//typedef struct _PCI_BAR_IO
+//{
+//	CHAR BarType:1;
+//	CHAR Reserved:1;
+//	ULONG Address:30;
+//}PCI_BAR_IO, * PPCI_BAR_IO;
 
 typedef struct _PCI_INFO
 {

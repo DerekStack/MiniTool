@@ -106,6 +106,10 @@ VOID WritePhysicalMemory(
 
 	DbgPrint("Memory return from kernel from physical Address= 0x%I64x, Old Data= 0x%I64x, Length= %I64d \r\n", PhysicalAddress, Buffer, ByteCount);
 
+	if (Buffer)
+	{
+		free(Buffer);
+	}
 }
 
 VOID
@@ -218,6 +222,11 @@ int ReadPciCfg(
 	Buffer |= (Func << 8);
 	Buffer |= 0;
 
+	if (ByteCount == 0)
+	{
+		ByteCount = 256;
+	}
+
 	Value = (PUCHAR)malloc(ByteCount);
 	if (Value == NULL)
 	{
@@ -253,6 +262,11 @@ int ReadPciCfg(
 			DbgPrint("%.2X ", Value[i]);
 			break;
 		}
+	}
+
+	if (Value)
+	{
+		free(Value);
 	}
 
 	return RetBytes;
@@ -301,9 +315,9 @@ VOID ReadMMCFG(
 )
 {
 	ULONG RetBytes = 0;
-	ULONG Buffer = 0;
+	PUCHAR Buffer;
 	PUCHAR Value;
-	ULONG64 InputParam[4];
+	ULONG64 InputParam[3];
 	ULONG64 mcfgTableBase = 0;
 
 	GetMCFGTable(&mcfgTableBase);
@@ -314,15 +328,22 @@ VOID ReadMMCFG(
 		return;
 	}
 
-	Buffer |= (Bus << 24);
-	Buffer |= (Dev << 16);
-	Buffer |= (Func << 8);
-	Buffer |= 0;
+	Buffer = (PUCHAR)malloc(ByteCount);
+	if (Buffer == NULL)
+	{
+		DbgPrint("cannot allocate memory \r\n");
+		return;
+	}
 
-	InputParam[0] = Buffer;
-	InputParam[1] = mcfgTableBase;
-	InputParam[2] = Offset;
-	InputParam[3] = ByteCount;
+	ULONG64 BaseAddress = mcfgTableBase;
+	ULONG64 pciConfigAddress = BaseAddress + (Bus << 20 | Dev << 15 | Func << 12);
+
+
+	InputParam[0] = pciConfigAddress;
+	InputParam[1] = Offset;
+	InputParam[2] = ByteCount;
+
+
 
 	Value = (PUCHAR)malloc(ByteCount);
 	if (Value == NULL)
@@ -333,7 +354,7 @@ VOID ReadMMCFG(
 
 	RtlZeroMemory(Value, ByteCount);
 
-	DRIVER_REQUEST(IOCTL_RD_MMCFG, (void*)InputParam, sizeof(ULONG64) * 4, Value, ByteCount, &RetBytes);
+	DRIVER_REQUEST(IOCTL_RD_PHYSMEM, (void*)InputParam, sizeof(ULONG64) * 3, Buffer, ByteCount, &RetBytes);
 
 	DbgPrint("\r\n");
 	for (int i = 0; i < ByteCount; i += max(1, Alignment))
@@ -370,53 +391,256 @@ VOID ReadMMCFG(
 
 VOID EnumPCIIOAll()
 {
-	PCI_INFO PCIInfo[65536];
+	PCI_INFO PCIInfo;
 
 	ULONG RetBytes = 0;
 	ULONG Buffer = 0;
-
-	RtlZeroMemory(&PCIInfo, sizeof(PCI_INFO));
-
-	DRIVER_REQUEST(IOCTL_ENUM_PCI, (void*)&Buffer, 0x4, PCIInfo, sizeof(PCIInfo), &RetBytes);
 
 	DbgPrint("--------------------------------------\r\n");
 	DbgPrint("| PCI ID   | Vendor ID   | Device ID | \r\n");
 	DbgPrint("--------------------------------------\r\n");
 
-	for (int i = 0; i < 100; i++)
+	for (int i = 0; i < 256; i++)
 	{
-		UINT32 PCIID = PCIInfo[i].PCIID;
-		UINT32 Bus = (PCIID >> 24) & 0xFF;
-		UINT32 Dev = (PCIID >> 16) & 0xFF;
-		UINT32 Fun = (PCIID >> 8) & 0xFF;
-		DbgPrint("|B:%x D:%x F:%x|%-11x|%-11x|\r\n", Bus, Dev, Fun, PCIInfo[i].u.VendorID, PCIInfo[i].u.DeviceID);
+		for (int j = 0; j < 32; j++)
+		{
+			for (int k = 0; k < 8; k++)
+			{
+				Buffer = 0;
+				Buffer |= (i << 24);
+				Buffer |= (j << 16);
+				Buffer |= (k << 8);
+				Buffer |= 0;
+
+				RtlZeroMemory(&PCIInfo, sizeof(PCI_INFO));
+				DRIVER_REQUEST(IOCTL_ENUM_PCI, (void*)&Buffer, 0x4, &PCIInfo, sizeof(PCIInfo), &RetBytes);
+
+				UINT32 PCIID = PCIInfo.PCIID;
+				if (PCIID != 0)
+				{
+					UINT32 Bus = (PCIID >> 24) & 0xFF;
+					UINT32 Dev = (PCIID >> 16) & 0xFF;
+					UINT32 Fun = (PCIID >> 8) & 0xFF;
+					DbgPrint("|B:%x D:%x F:%x|%-11x|%-11x|\r\n", Bus, Dev, Fun, PCIInfo.u.VendorID, PCIInfo.u.DeviceID);
+				}
+				
+			}
+		}
 	}
 }
 
 VOID EnumPCIEAll()
 {
-	PCI_INFO PCIInfo[65536];
 	ULONG RetBytes = 0;
 	ULONG Buffer = 0;
 
-	RtlZeroMemory(&PCIInfo, sizeof(PCI_INFO));
-
-	DRIVER_REQUEST(IOCTL_ENUM_PCIE, (void*)&Buffer, 0x4, PCIInfo, sizeof(PCIInfo), &RetBytes);
+	PCI_INFO PCIInfo;
 
 	DbgPrint("--------------------------------------\r\n");
 	DbgPrint("| PCI ID   | Vendor ID   | Device ID | \r\n");
 	DbgPrint("--------------------------------------\r\n");
 
-	for (int i = 0; i < 100; i++)
+	for (int i = 0; i < 256; i++)
 	{
-		UINT32 PCIID = PCIInfo[i].PCIID;
-		UINT32 Bus = (PCIID >> 24) & 0xFF;
-		UINT32 Dev = (PCIID >> 16) & 0xFF;
-		UINT32 Fun = (PCIID >> 8) & 0xFF;
-		DbgPrint("|B:%x D:%x F:%x|%-11x|%-11x|\r\n", Bus, Dev, Fun, PCIInfo[i].u.VendorID, PCIInfo[i].u.DeviceID);
+		for (int j = 0; j < 32; j++)
+		{
+			for (int k = 0; k < 8; k++)
+			{
+				Buffer = 0;
+				Buffer |= (i << 24);
+				Buffer |= (j << 16);
+				Buffer |= (k << 8);
+				Buffer |= 0;
+
+				RtlZeroMemory(&PCIInfo, sizeof(PCI_INFO));
+				DRIVER_REQUEST(IOCTL_ENUM_PCIE, (void*)&Buffer, 0x4, &PCIInfo, sizeof(PCIInfo), &RetBytes);
+
+				UINT32 PCIID = PCIInfo.PCIID;
+
+				if (PCIID != 0)
+				{
+					UINT32 Bus = (PCIID >> 24) & 0xFF;
+					UINT32 Dev = (PCIID >> 16) & 0xFF;
+					UINT32 Fun = (PCIID >> 8) & 0xFF;
+					DbgPrint("|B:%x D:%x F:%x|%-11x|%-11x|\r\n", Bus, Dev, Fun, PCIInfo.u.VendorID, PCIInfo.u.DeviceID);
+				}
+			}
+		}
 	}
 }
 
+void ReadPciDevice(UCHAR Bus,
+	UCHAR Dev,
+	UCHAR Func,
+	PCI_DEVICE* pciDevice)
+{
+	ULONG RetBytes = 0;
+	ULONG Buffer = 0;
+	ULONG ByteCount = 256;
+
+	Buffer |= (Bus << 24);
+	Buffer |= (Dev << 16);
+	Buffer |= (Func << 8);
+	Buffer |= 0;
+
+	DRIVER_REQUEST(IOCTL_RD_PCICFG, (void*)&Buffer, 0x4, pciDevice, ByteCount, &RetBytes);
+
+}
+
+int ReadPciDeviceType(
+	UCHAR Bus,
+	UCHAR Dev,
+	UCHAR Func)
+{
+
+	PCI_DEVICE* Value;
+	ULONG ByteCount = 256;
+
+	Value = (PCI_DEVICE*)malloc(ByteCount);
+	if (Value == NULL)
+	{
+		DbgPrint("cannot allocate memory \r\n");
+		return 0;
+	}
+
+	RtlZeroMemory(Value, ByteCount);
+
+	ReadPciDevice(Bus,Dev,Func,(PCI_DEVICE*)Value);
+
+	DbgPrint("\r\n");
+	//check Header type
+	PCI_DEVICE* pciDevice = (PCI_DEVICE*)Value;
+	DbgPrint("Class: %x , SubClass:%x", pciDevice->Class, pciDevice->Subclass);
+
+	DbgPrint("\r\n");
+
+	if (Value)
+	{
+		free(Value);
+	}
+}
+
+int ReadPciBarType(
+	UCHAR Bus,
+	UCHAR Dev,
+	UCHAR Func)
+{
+	PCI_BAR_INFO BarInfo[6];
+	ULONG RetBytes = 0;
+	ULONG Buffer = 0;
+
+	Buffer |= (Bus << 24);
+	Buffer |= (Dev << 16);
+	Buffer |= (Func << 8);
+	Buffer |= 0;
+
+	RtlZeroMemory(&BarInfo, sizeof(BarInfo));
+
+	DRIVER_REQUEST(IOCTL_RD_BAR_INFO, (void*)&Buffer, 0x4, BarInfo, sizeof(BarInfo), &RetBytes);
+
+	DbgPrint("------------------------------------------\r\n");
+	DbgPrint("| Bar Address   | Bar Type   | Address   |\r\n");
+	DbgPrint("------------------------------------------\r\n");
+
+	for (int i = 0; i < 6; i++)
+	{
+		UINT32 BarAddress = BarInfo[i].BarAddress;
+
+		UINT32 barType = BarAddress & 0x1;
+
+		UINT64 baseAddr = 0;
+		if (barType == 0)
+		{
+			UINT32 memType = BarAddress & 0x6;
+			if (memType == 0x0)
+			{
+				baseAddr = BarAddress & 0xFFFFFFF0;
+			}
+			else if (memType == 0x2)
+			{
+				++i;
+				UINT64 NextBarAddress = BarInfo[i].BarAddress;
+				baseAddr = ((BarAddress & 0xFFFFFFF0) + ((NextBarAddress & 0xFFFFFFFF) << 32));
+			}
+			
+		}
+		else if (barType == 1)
+		{
+			baseAddr = BarAddress & 0xFFFFFFFC;
+		}
+
+		DbgPrint("|%-15x|%-11x|%-16x|\r\n", BarAddress, barType, baseAddr);
+	}
+
+	DbgPrint("-----------------------------\r\n");
+
+	return 0;
+}
+
+
+VOID EnumPciDevice(ULONG bus,int level)
+{
+	ULONG dev = 0;
+	ULONG fun = 0;
+
+	PCI_DEVICE* Value;
+	ULONG ByteCount = 256;
+
+	Value = (PCI_DEVICE*)malloc(ByteCount);
+	RtlZeroMemory(Value, ByteCount);
+
+	if (Value == NULL)
+	{
+		DbgPrint("cannot allocate memory \r\n");
+		return;
+	}
+
+	for (dev = 0; dev < 32; dev++)
+	{
+		for (fun = 0; fun < 8; fun++)
+		{
+			RtlZeroMemory(Value, ByteCount);
+			ReadPciDevice(bus, dev, fun, Value);
+			if (Value == NULL)
+			{
+				DbgPrint("cannot allocate memory \r\n");
+				return;
+			}
+
+			UINT32 vendorID = Value->VendorID;
+			UINT8 classCode = Value->Class;
+			UINT8 subClassCode = Value->Subclass;
+			UINT8 headerType = Value->HeaderType;
+			if (vendorID != 0xffff)
+			{
+				for (int i = 0; i < level; i++)
+				{
+					DbgPrint("\t");
+				}
+				DbgPrint("Bus (%x,%x,%x), VendorID:%x,Class:%x,SubClass:%d,HeaderType:%x\r\n", bus, dev, fun, vendorID, classCode, subClassCode, headerType);
+
+				if (headerType == 0x1 || headerType == 0x81)
+				{
+					PCI_BRIDGE* bridgeValue = (PCI_BRIDGE*)(Value);
+					UINT8 secondBus = bridgeValue->SecondaryBus;
+					EnumPciDevice(secondBus, level+1);
+				}
+			}
+		}
+	}
+
+	if (Value)
+	{
+		free(Value);
+	}
+}
+
+VOID EnumPciTree()
+{
+	ULONG bus = 0;
+
+	EnumPciDevice(bus,0);
+}
 
 ULONG64 ReadMsr(ULONG64 index)
 {
@@ -490,6 +714,9 @@ void PrintMenu()
 	DbgPrint("|  -r     -mmcfg <Bus> <Device> <Function> <offset> <bytes count>  Read mmcfg                                  | \r\n");
 	DbgPrint("|  -r     -enumpciio                                               Enum PCI Device(CFC)                        | \r\n");
 	DbgPrint("|  -r     -enumpcie                                                Enum PCI Device                             | \r\n");
+	DbgPrint("|  -r     -pcitree                                                 Enum PCI Tree                               | \r\n");
+	DbgPrint("|  -r     -devicetype <Bus> <Device> <Function>                    Read Device Type                            | \r\n");
+	DbgPrint("|  -r     -bartype <Bus> <Device> <Function>                       Read Bar Type                               | \r\n");
 	DbgPrint("|  -q                                                              Quit  Application                           | \r\n");
 	DbgPrint("---------------------------------------------------------------------------------------------------------------- \r\n");
 
@@ -677,6 +904,29 @@ int main()
 			if (!strcmp(x[1], "-enumpcie"))
 			{
 				EnumPCIEAll();
+			}
+
+			if (!strcmp(x[1], "-pcitree"))
+			{
+				EnumPciTree();
+			}
+
+			if (!strcmp(x[1], "-devicetype"))
+			{
+				UCHAR Bus = strtoull(x[2], NULL, 0) & 0xFF;
+				UCHAR Dev = strtoull(x[3], NULL, 0) & 0xFF;
+				UCHAR Func = strtoull(x[4], NULL, 0) & 0xFF;
+
+				ReadPciDeviceType(Bus, Dev, Func);
+			}
+
+			if (!strcmp(x[1], "-bartype"))
+			{
+				UCHAR Bus = strtoull(x[2], NULL, 0) & 0xFF;
+				UCHAR Dev = strtoull(x[3], NULL, 0) & 0xFF;
+				UCHAR Func = strtoull(x[4], NULL, 0) & 0xFF;
+
+				ReadPciBarType(Bus,Dev,Func);
 			}
 
 

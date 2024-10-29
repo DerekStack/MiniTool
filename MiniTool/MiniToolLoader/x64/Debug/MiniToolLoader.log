@@ -1,0 +1,30 @@
+﻿  MiniLoader.cpp
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\Firmwaretable.h(17,13): warning C4200: nonstandard extension used: zero-sized array in struct/union
+  (compiling source file 'MiniLoader.cpp')
+      C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\Firmwaretable.h(17,13):
+      This member will be ignored by a defaulted constructor or copy/move assignment operator
+  
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(45,2): warning C4244: 'argument': conversion from 'ULONG64' to 'DWORD', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(105,2): warning C4244: 'argument': conversion from 'ULONG64' to 'DWORD', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(107,11): warning C4477: 'printf' : format string '%I64x' requires an argument of type 'unsigned __int64', but variadic argument 2 has type 'PUCHAR'
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(140,2): warning C4244: 'argument': conversion from 'ULONG64' to 'DWORD', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(240,2): warning C4244: 'argument': conversion from 'UINT64' to 'DWORD', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(357,2): warning C4244: 'argument': conversion from 'UINT64' to 'DWORD', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(573,12): warning C4477: 'printf' : format string '%-16x' requires an argument of type 'unsigned int', but variadic argument 3 has type 'UINT64'
+      C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(573,12):
+      consider using '%llx' in the format string
+      C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(573,12):
+      consider using '%Ix' in the format string
+      C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(573,12):
+      consider using '%I64x' in the format string
+  
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(604,28): warning C4244: 'argument': conversion from 'ULONG' to 'UCHAR', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(604,23): warning C4244: 'argument': conversion from 'ULONG' to 'UCHAR', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(604,18): warning C4244: 'argument': conversion from 'ULONG' to 'UCHAR', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(866,45): warning C4244: 'argument': conversion from 'ULONG64' to 'UCHAR', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(875,44): warning C4244: 'argument': conversion from 'ULONG64' to 'UINT32', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(887,52): warning C4244: 'argument': conversion from 'ULONG64' to 'UCHAR', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(897,55): warning C4244: 'argument': conversion from 'ULONG64' to 'UINT32', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(951,51): warning C4244: 'argument': conversion from 'ULONG64' to 'UINT32', possible loss of data
+C:\Users\Derek\source\repos\MiniTool\MiniToolLoader\MiniLoader.cpp(522,1): warning C4715: 'ReadPciDeviceType': not all control paths return a value
+  MiniToolLoader.vcxproj -> C:\Users\Derek\source\repos\MiniTool\x64\Debug\MiniToolLoader.exe
