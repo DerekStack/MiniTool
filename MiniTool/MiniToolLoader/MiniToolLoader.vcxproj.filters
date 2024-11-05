@@ -21,6 +21,9 @@
     <ClCompile Include="MiniDrvCtrl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="pci.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MiniDrvCtrl.h">
@@ -30,6 +33,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Firmwaretable.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pci.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

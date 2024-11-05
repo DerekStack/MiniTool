@@ -130,11 +130,13 @@
   <ItemGroup>
     <ClCompile Include="MiniDrvCtrl.cpp" />
     <ClCompile Include="MiniLoader.cpp" />
+    <ClCompile Include="pci.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Firmwaretable.h" />
     <ClInclude Include="Log.h" />
     <ClInclude Include="MiniDrvCtrl.h" />
+    <ClInclude Include="pci.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

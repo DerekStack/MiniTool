@@ -4,7 +4,7 @@
 #include "..\MiniTool\ioctl.h"
 #include "Log.h"
 #include "Firmwaretable.h"
-
+#include "pci.h"
 
 MiniDrvCtrl miniDriverCtrl;
 
@@ -607,9 +607,9 @@ VOID EnumPciDevice(ULONG bus,int level)
 				return;
 			}
 
-			UINT32 vendorID = Value->VendorID;
-			UINT8 classCode = Value->Class;
-			UINT8 subClassCode = Value->Subclass;
+			UINT16 vendorID = Value->VendorID;
+			UINT16 classCode = Value->Class;
+			UINT16 subClassCode = Value->Subclass;
 			UINT8 headerType = Value->HeaderType;
 			if (vendorID != 0xffff)
 			{
@@ -617,7 +617,60 @@ VOID EnumPciDevice(ULONG bus,int level)
 				{
 					DbgPrint("\t");
 				}
-				DbgPrint("Bus (%x,%x,%x), VendorID:%x,Class:%x,SubClass:%d,HeaderType:%x\r\n", bus, dev, fun, vendorID, classCode, subClassCode, headerType);
+				PCI_VENDOR* pcivendor = FindVendorData(vendorID);
+
+				if (pcivendor)
+				{
+					const char* vendorName = pcivendor->VendorName;
+					PCI_CLASS* pciClass = FindClassData(classCode);
+					if (pciClass)
+					{
+						bool subClassExist = pciClass->SubClassExist;
+						const char* className = pciClass->ClassName;
+						if (subClassExist)
+						{
+							UINT16 subClassCodeID = (classCode) << 8 | (subClassCode);
+							PCI_SUBCLASS* pciSubClass = FindSubClassData(subClassCodeID);
+							if (pciSubClass)
+							{
+								const char* subclassName = pciSubClass->SubclassName;
+								DbgPrint("Bus (%x,%x,%x), VendorID:%x-(Vendor:%s),Class:%x-(Class Name:%s),SubClass:%d-(SubClassName:%s),HeaderType:%x\r\n", bus, dev, fun,
+									vendorID, vendorName,
+									classCode, className,
+									subClassCode, subclassName,
+									headerType);
+							}
+							else
+							{
+								DbgPrint("Bus (%x,%x,%x), VendorID:%x-(Vendor:%s),Class:%x-(Class Name:%s),SubClass:%d,HeaderType:%x\r\n", bus, dev, fun,
+									vendorID, vendorName,
+									classCode, className,
+									subClassCode,
+									headerType);
+							}
+						}
+						else
+						{
+							DbgPrint("Bus (%x,%x,%x), VendorID:%x-(Vendor:%s),Class:%x-(Class Name:%s),SubClass:%d,HeaderType:%x\r\n", bus, dev, fun,
+								vendorID, vendorName,
+								classCode, className,
+								subClassCode,
+								headerType);
+						}
+					}
+					else
+					{
+						DbgPrint("Bus (%x,%x,%x), VendorID:%x,Vendor:%s,Class:%x,SubClass:%d,SubClassName:%s,HeaderType:%x\r\n", bus, dev, fun,
+							vendorID, vendorName,
+							classCode, subClassCode,
+							headerType);
+					}
+				}
+				else
+				{
+					DbgPrint("Bus (%x,%x,%x), VendorID:%x,Vendor Unknown,HeaderType:%x\r\n", bus, dev, fun, vendorID, headerType);
+				}
+
 
 				if (headerType == 0x1 || headerType == 0x81)
 				{
@@ -773,6 +826,7 @@ int main()
 {
 	int count = 0;
 	UCHAR Buffer[4096] = { 0 };
+
 	PrintMenu();
 	Load();
 	while (1)
