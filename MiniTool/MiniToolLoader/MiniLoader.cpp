@@ -520,7 +520,7 @@ int ReadPciDeviceType(
 	}
 }
 
-int ReadPciBarType(
+int ReadPciBarAddrInfo(
 	UCHAR Bus,
 	UCHAR Dev,
 	UCHAR Func)
@@ -560,7 +560,7 @@ int ReadPciBarType(
 			{
 				++i;
 				UINT64 NextBarAddress = BarInfo[i].BarAddress;
-				baseAddr = ((BarAddress & 0xFFFFFFF0) + ((NextBarAddress & 0xFFFFFFFF) << 32));
+				baseAddr = (((BarAddress & 0xFFFFFFF0) << 32)| ((NextBarAddress & 0xFFFFFFFF)));
 			}
 			
 		}
@@ -569,7 +569,7 @@ int ReadPciBarType(
 			baseAddr = BarAddress & 0xFFFFFFFC;
 		}
 
-		DbgPrint("|%-15x|%-11x|%-16x|\r\n", BarAddress, barType, baseAddr);
+		DbgPrint("|%-15x|%-12x|%-16x|\r\n", BarAddress, barType, baseAddr);
 	}
 
 	DbgPrint("-----------------------------\r\n");
@@ -769,7 +769,7 @@ void PrintMenu()
 	DbgPrint("|  -r     -enumpcie                                                Enum PCI Device                             | \r\n");
 	DbgPrint("|  -r     -pcitree                                                 Enum PCI Tree                               | \r\n");
 	DbgPrint("|  -r     -devicetype <Bus> <Device> <Function>                    Read Device Type                            | \r\n");
-	DbgPrint("|  -r     -bartype <Bus> <Device> <Function>                       Read Bar Type                               | \r\n");
+	DbgPrint("|  -r     -baraddrinfo <Bus> <Device> <Function>                   Read Bar address info                       | \r\n");
 	DbgPrint("|  -q                                                              Quit  Application                           | \r\n");
 	DbgPrint("---------------------------------------------------------------------------------------------------------------- \r\n");
 
@@ -974,13 +974,13 @@ int main()
 				ReadPciDeviceType(Bus, Dev, Func);
 			}
 
-			if (!strcmp(x[1], "-bartype"))
+			if (!strcmp(x[1], "-baraddrinfo"))
 			{
 				UCHAR Bus = strtoull(x[2], NULL, 0) & 0xFF;
 				UCHAR Dev = strtoull(x[3], NULL, 0) & 0xFF;
 				UCHAR Func = strtoull(x[4], NULL, 0) & 0xFF;
 
-				ReadPciBarType(Bus,Dev,Func);
+				ReadPciBarAddrInfo(Bus,Dev,Func);
 			}
 
 
