@@ -5,7 +5,7 @@ Minitool is development tool for physical memory manipulation and interacting wi
 
 # Demo
 
-launch the MiniToolLoader.exe, right click and run as administrator.
+To Launch the MiniToolLoader.exe, right click and run as administrator.
 
 <img src="https://github.com/DerekStack/MiniTool/blob/main/Image/Screenshot%202025-01-18%20222412.png" width="70%" height="70%"> </img> 
 
